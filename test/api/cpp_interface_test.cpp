@@ -67,6 +67,10 @@ struct SVCDecoderImpl : public ISVCDecoder {
     EXPECT_TRUE (gThis == this);
     return 1;
   }
+  virtual int ResetParseOnlyMemory() {
+    EXPECT_TRUE(gThis == this);
+    return 1;
+  }
   virtual long EXTAPI Uninitialize() {
     EXPECT_TRUE (gThis == this);
     return 2;

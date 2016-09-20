@@ -351,6 +351,7 @@ class ISVCDecoder {
   * @return 0 - success; otherwise - failed;
   */
   virtual long EXTAPI Initialize (const SDecodingParam* pParam) = 0;
+  virtual int ResetParseOnlyMemory () = 0;
 
   /// Uninitialize the decoder
   virtual long EXTAPI Uninitialize() = 0;

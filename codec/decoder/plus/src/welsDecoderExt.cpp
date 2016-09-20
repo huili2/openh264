@@ -269,6 +269,19 @@ int32_t CWelsDecoder::InitDecoder (const SDecodingParam* pParam) {
   return cmResultSuccess;
 }
 
+int32_t CWelsDecoder::ResetParseOnlyMemory() {
+  PWelsDecoderContext pCtx = m_pDecContext;
+  memset(pCtx->pParserBsInfo->pDstBuff, 0, MAX_ACCESS_UNIT_CAPACITY * sizeof(uint8_t));
+  CMemoryAlign* pMa = pCtx->pMemAlign;
+
+  if ((pCtx->sSavedData.pHead = static_cast<uint8_t*> (pMa->WelsMallocz(pCtx->iMaxBsBufferSizeInByte,
+    "pCtx->sSavedData.pHead"))) == NULL) {
+    return ERR_INFO_OUT_OF_MEMORY;
+  }
+  pCtx->sSavedData.pStartPos = pCtx->sSavedData.pCurPos = pCtx->sSavedData.pHead;
+  pCtx->sSavedData.pEnd = pCtx->sSavedData.pHead + pCtx->iMaxBsBufferSizeInByte;
+
+}
 int32_t CWelsDecoder::ResetDecoder() {
   // TBC: need to be modified when context and trace point are null
   if (m_pDecContext != NULL && m_pWelsTrace != NULL) {

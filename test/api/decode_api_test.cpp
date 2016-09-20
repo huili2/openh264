@@ -835,7 +835,7 @@ class DecodeParseAPI : public ::testing::TestWithParam<EncodeDecodeFileParamBase
   SHA1Context ctx_;
 };
 
-//#define DEBUG_FILE_SAVE
+//#define DEBUG_FILE_SAVE_PARSEONLY
 TEST_F (DecodeParseAPI, ParseOnly_General) {
   EncodeDecodeFileParamBase p;
   p.width = iWidth_;
@@ -851,7 +851,7 @@ TEST_F (DecodeParseAPI, ParseOnly_General) {
   encoder_->SetOption (ENCODER_OPTION_TRACE_LEVEL, &iTraceLevel);
   decoder_->SetOption (DECODER_OPTION_TRACE_LEVEL, &iTraceLevel);
   uint32_t uiTargetLayerId = rand() % kiTotalLayer; //run only once
-#ifdef DEBUG_FILE_SAVE
+#ifdef DEBUG_FILE_SAVE_PARSEONLY
   FILE* fDec = fopen ("output.264", "wb");
   FILE* fEnc = fopen ("enc.264", "wb");
   FILE* fExtract = fopen ("extract.264", "wb");
@@ -867,11 +867,11 @@ TEST_F (DecodeParseAPI, ParseOnly_General) {
       EncodeOneFrame (iFrame);
       //extract target layer data
       encToDecData (info, iLen);
-#ifdef DEBUG_FILE_SAVE
+#ifdef DEBUG_FILE_SAVE_PARSEONLY
       fwrite (info.sLayerInfo[0].pBsBuf, iLen, 1, fEnc);
 #endif
       ExtractDidNal (&info, iLen, &m_SLostSim, uiTargetLayerId);
-#ifdef DEBUG_FILE_SAVE
+#ifdef DEBUG_FILE_SAVE_PARSEONLY
       fwrite (info.sLayerInfo[0].pBsBuf, iLen, 1, fExtract);
 #endif
       //parseonly
@@ -889,7 +889,7 @@ TEST_F (DecodeParseAPI, ParseOnly_General) {
         iLen += BsInfo_.iNalLenInByte[i];
         i++;
       }
-#ifdef DEBUG_FILE_SAVE
+#ifdef DEBUG_FILE_SAVE_PARSEONLY
       fwrite (BsInfo_.pDstBuff, iLen, 1, fDec);
 #endif
       SHA1Input (&ctx_, BsInfo_.pDstBuff, iLen);
@@ -902,7 +902,7 @@ TEST_F (DecodeParseAPI, ParseOnly_General) {
       CompareHashAnyOf (digest, pHashStr[uiTargetLayerId], sizeof *pHashStr / sizeof **pHashStr);
     }
   } //while
-#ifdef DEBUG_FILE_SAVE
+#ifdef DEBUG_FILE_SAVE_PARSEONLY
   fclose (fEnc);
   fclose (fExtract);
   fclose (fDec);
@@ -969,5 +969,316 @@ TEST_F (DecodeParseAPI, ParseOnly_SpecSliceLoss) {
   } //while
 }
 
+//Test parseonly crash cases
+class DecodeParseCrashAPI : public ::testing::TestWithParam<EncodeDecodeFileParamBase>, public EncodeDecodeTestBase {
+public:
+  DecodeParseCrashAPI() {
+    memset(&BsInfo_, 0, sizeof(SParserBsInfo));
+    fYuv_ = NULL;
+    iWidth_ = 1280;
+    iHeight_ = 720;
+    iLayer_ = 1;
+    iSliceNum_ = 4;
+  }
+  void SetUp() {
+    EncodeDecodeTestBase::SetUp();
+
+    if (decoder_)
+      decoder_->Uninitialize();
+    SDecodingParam decParam;
+    memset(&decParam, 0, sizeof(SDecodingParam));
+    decParam.uiTargetDqLayer = UCHAR_MAX;
+    decParam.eEcActiveIdc = ERROR_CON_DISABLE;
+    decParam.bParseOnly = true;
+    decParam.sVideoProperty.eVideoBsType = VIDEO_BITSTREAM_DEFAULT;
+
+    int rv = decoder_->Initialize(&decParam);
+    ASSERT_EQ(0, rv);
+    memset(&BsInfo_, 0, sizeof(SParserBsInfo));
+    fYuv_ = fopen("C:\\Users\\huili2\\Documents\\GitHub\\openh264\\res\\Cisco_Absolute_Power_1280x720_30fps.yuv", "rb");
+    ASSERT_TRUE(fYuv_ != NULL);
+    ucBuf_ = NULL;
+    ucBuf_ = new unsigned char[1000000];
+    ASSERT_TRUE(ucBuf_ != NULL);
+
+  }
+  void TearDown() {
+    EncodeDecodeTestBase::TearDown();
+    if (fYuv_ != NULL) {
+      fclose(fYuv_);
+    }
+    if (NULL != ucBuf_) {
+      delete[] ucBuf_;
+      ucBuf_ = NULL;
+    }
+    ASSERT_TRUE(ucBuf_ == NULL);
+
+  }
+
+  void prepareEncDecParam(const EncodeDecodeFileParamBase p) {
+    EncodeDecodeTestBase::prepareEncDecParam(p);
+    unsigned char* pTmpPtr = BsInfo_.pDstBuff; //store for restore
+    memset(&BsInfo_, 0, sizeof(SParserBsInfo));
+    BsInfo_.pDstBuff = pTmpPtr;
+  }
+
+  void EncodeOneFrame(int iIdx) {
+    int iFrameSize = iWidth_ * iHeight_ * 3 / 2;
+    int iSize = (int)fread(buf_.data(), sizeof(char), iFrameSize, fYuv_);
+    if (feof(fYuv_) || iSize != iFrameSize) {
+      rewind(fYuv_);
+      iSize = (int)fread(buf_.data(), sizeof(char), iFrameSize, fYuv_);
+      ASSERT_TRUE(iSize == iFrameSize);
+    }
+    int rv = encoder_->EncodeFrame(&EncPic, &info);
+    ASSERT_TRUE(rv == cmResultSuccess || rv == cmUnknownReason);
+  }
+
+  void prepareParam(int iLayerNum, int iSliceNum, int width, int height, float framerate, SEncParamExt* pParam) {
+    memset(pParam, 0, sizeof(SEncParamExt));
+    EncodeDecodeTestBase::prepareParam(iLayerNum, iSliceNum, width, height, framerate, pParam);
+  }
+
+protected:
+  SParserBsInfo BsInfo_;
+  FILE* fYuv_;
+  int iWidth_;
+  int iHeight_;
+  int iLayer_;
+  int iSliceNum_;
+  unsigned char* ucBuf_;
+};
+
+#define DEBUG_FILE_SAVE_CRA1
+TEST_F(DecodeParseCrashAPI, ParseOnlyCrash1_General) {
+  uint32_t uiGet;
+  encoder_->Uninitialize();
+  //do tests until crash
+  unsigned int uiLoopRound = 0;
+  unsigned char* pucBuf = ucBuf_;
+  int iDecAuSize;
+#ifdef DEBUG_FILE_SAVE_CRA1
+  //open file to save tested BS
+  FILE* fDataFile = fopen("test_parseonly_crash.264", "wb");
+  FILE* fLenFile = fopen("test_parseonly_crash_len.log", "w");
+  int iFileSize = 0;
+#endif
+
+  do {
+    int iTotalFrameNum = (rand() % 100) + 1;
+    EncodeDecodeParamBase p = kParamArray[8]; //720p by default
+
+    //Initialize Encoder
+    prepareParam(1, 4, p.width, p.height, p.frameRate, &param_);
+    param_.iRCMode = RC_TIMESTAMP_MODE;
+    param_.iTargetBitrate = p.iTarBitrate;
+    param_.uiIntraPeriod = 0;
+    param_.eSpsPpsIdStrategy = CONSTANT_ID;
+    param_.bEnableBackgroundDetection = true;
+    param_.bEnableSceneChangeDetect = (rand() % 3) ? true : false;
+    param_.bPrefixNalAddingCtrl = 0;// (rand() % 2) ? true : false;
+    param_.iEntropyCodingModeFlag = 0;
+    param_.bEnableFrameSkip = true;
+    param_.iMultipleThreadIdc = 0;
+    param_.sSpatialLayers[0].iSpatialBitrate = p.iTarBitrate;
+    param_.sSpatialLayers[0].iMaxSpatialBitrate = p.iTarBitrate << 1;
+    param_.sSpatialLayers[0].sSliceArgument.uiSliceMode = SM_FIXEDSLCNUM_SLICE; // (rand() % 2) ? SM_SIZELIMITED_SLICE : SM_SINGLE_SLICE;
+    if (param_.sSpatialLayers[0].sSliceArgument.uiSliceMode == SM_SIZELIMITED_SLICE) {
+      param_.sSpatialLayers[0].sSliceArgument.uiSliceSizeConstraint = 1400;
+      param_.uiMaxNalSize = 1400;
+    }
+    else {
+      param_.sSpatialLayers[0].sSliceArgument.uiSliceSizeConstraint = 0;
+      param_.uiMaxNalSize = 0;
+    }
+
+    int rv = encoder_->InitializeExt(&param_);
+    ASSERT_TRUE(rv == cmResultSuccess);
+    decoder_->GetOption(DECODER_OPTION_ERROR_CON_IDC, &uiGet);
+    EXPECT_EQ(uiGet, (uint32_t)ERROR_CON_DISABLE); //default value should be ERROR_CON_SLICE_COPY
+    int32_t iTraceLevel = WELS_LOG_QUIET;
+    encoder_->SetOption(ENCODER_OPTION_TRACE_LEVEL, &iTraceLevel);
+    decoder_->SetOption(DECODER_OPTION_TRACE_LEVEL, &iTraceLevel);
+
+    //Start for enc/dec
+    int iIdx = 0;
+    unsigned char* pData[3] = { NULL };
+
+    EncodeDecodeFileParamBase pInput; //to conform with old functions
+    pInput.width = p.width;
+    pInput.height = p.height;
+    pInput.frameRate = p.frameRate;
+    prepareEncDecParam(pInput);
+    while (iIdx++ < iTotalFrameNum) { // loop in frame
+      EncodeOneFrame(0);
+#ifdef DEBUG_FILE_SAVE_CRA1
+      //reset file if file size large
+      if ((info.eFrameType == videoFrameTypeIDR) && (iFileSize >= (1 << 25))) {
+        fclose(fDataFile);
+        fclose(fLenFile);
+        fDataFile = fopen("test_parseonly_crash.264", "wb");
+        fLenFile = fopen("test_parseonly_crash_len.log", "w");
+        iFileSize = 0;
+        decoder_->Uninitialize();
+
+        SDecodingParam decParam;
+        memset(&decParam, 0, sizeof(SDecodingParam));
+        decParam.uiTargetDqLayer = UCHAR_MAX;
+        decParam.eEcActiveIdc = ERROR_CON_DISABLE;
+        decParam.bParseOnly = true;
+        decParam.sVideoProperty.eVideoBsType = VIDEO_BITSTREAM_DEFAULT;
+
+        rv = decoder_->Initialize(&decParam);
+        ASSERT_EQ(0, rv);
+      }
+#endif
+      if (info.eFrameType == videoFrameTypeSkip)
+        continue;
+      //deal with packets
+      unsigned char* pBsBuf;
+      iDecAuSize = 0;
+      pucBuf = ucBuf_; //init buf start pos for decoder usage
+      for (int iLayerNum = 0; iLayerNum < info.iLayerNum; iLayerNum++) {
+        SLayerBSInfo* pLayerBsInfo = &info.sLayerInfo[iLayerNum];
+        pBsBuf = info.sLayerInfo[iLayerNum].pBsBuf;
+        int iTotalNalCnt = pLayerBsInfo->iNalCount;
+        for (int iNalCnt = 0; iNalCnt < iTotalNalCnt; iNalCnt++) {  //loop in NAL
+          int iPacketSize = pLayerBsInfo->pNalLengthInByte[iNalCnt];
+          //packet loss
+          int iLossRateRange = (uiLoopRound % 20) + 1; //1-100
+          int iLossRate = (rand() % iLossRateRange);
+          bool bPacketLost = (rand() % 101) >(100 -
+            iLossRate);   // [0, (100-iLossRate)] indicates NO LOSS, (100-iLossRate, 100] indicates LOSS
+          if (!bPacketLost) { //no loss
+            memcpy(pucBuf, pBsBuf, iPacketSize);
+            pucBuf += iPacketSize;
+            iDecAuSize += iPacketSize;
+          }
+//#ifdef DEBUG_FILE_SAVE_CRA1
+//          else {
+//            printf("lost packet size=%d at frame-type=%d at loss rate %d (%d)\n", iPacketSize, info.eFrameType, iLossRate,
+//              iLossRateRange);
+//          }
+//#endif
+          //update bs info
+          pBsBuf += iPacketSize;
+        } //nal
+      } //layer
+
+#ifdef DEBUG_FILE_SAVE_CRA1
+        //save to file
+      fwrite(ucBuf_, 1, iDecAuSize, fDataFile);
+      fflush(fDataFile);
+      iFileSize += iDecAuSize;
+
+      //save to len file
+      unsigned long ulTmp[4];
+      ulTmp[0] = ulTmp[1] = ulTmp[2] = iIdx;
+      ulTmp[3] = iDecAuSize;
+      fwrite(ulTmp, sizeof(unsigned long), 4, fLenFile); // index, timeStamp, data size
+      fflush(fLenFile);
+#endif
+
+      //decode
+      pData[0] = pData[1] = pData[2] = 0;
+      memset(&BsInfo_, 0, sizeof(SBufferInfo));
+
+      rv = decoder_->DecodeParser(ucBuf_, iDecAuSize, &BsInfo_);
+      rv = decoder_->DecodeParser(NULL, 0, &BsInfo_); //reconstruction
+                                                                 //guarantee decoder EC status
+      decoder_->GetOption(DECODER_OPTION_ERROR_CON_IDC, &uiGet);
+      EXPECT_EQ(uiGet, (uint32_t)ERROR_CON_DISABLE);
+      //printf("current frame: %d", iIdx);
+    } //frame
+    uiLoopRound++;
+    if (uiLoopRound >= (1 << 30))
+      uiLoopRound = 0;
+#ifdef DEBUG_FILE_SAVE_CRA1
+    if (uiLoopRound % 10 == 0)
+      printf("run %d times.\n", uiLoopRound);
+  } while (1); //while (iLoopRound<100);
+  fclose(fDataFile);
+  fclose(fLenFile);
+#else
+}
+  while (uiLoopRound < 1000);
+#endif
+
+}
+
+
+////#define DEBUG_FILE_SAVE_PARSEONLYCRASH
+//TEST_F(DecodeParseCrashAPI, ParseOnlyCrash_General) {
+//  EncodeDecodeFileParamBase p;
+//  p.width = iWidth_;
+//  p.height = iHeight_;
+//  p.frameRate = kiFrameRate;
+//  p.numframes = kiFrameNum;
+//  prepareParam(iLayer_, iSliceNum_, p.width, p.height, p.frameRate, &param_);
+//  param_.iSpatialLayerNum = iLayer_;
+//  encoder_->Uninitialize();
+//  int rv = encoder_->InitializeExt(&param_);
+//  ASSERT_TRUE(rv == 0);
+//  int32_t iTraceLevel = WELS_LOG_QUIET;
+//  encoder_->SetOption(ENCODER_OPTION_TRACE_LEVEL, &iTraceLevel);
+//  decoder_->SetOption(DECODER_OPTION_TRACE_LEVEL, &iTraceLevel);
+//  uint32_t uiTargetLayerId = 0; // rand() % kiTotalLayer; //run only once
+//#ifdef DEBUG_FILE_SAVE_PARSEONLYCRASH
+//  FILE* fDec = fopen("output.264", "wb");
+//  FILE* fEnc = fopen("enc.264", "wb");
+//  FILE* fExtract = fopen("extract.264", "wb");
+//#endif
+//  if (uiTargetLayerId < kiTotalLayer) { //should always be true
+//                                        //Start for enc
+//    int iLen = 0;
+//    prepareEncDecParam(p);
+//    int iFrame = 0;
+//
+//    while (iFrame < p.numframes) {
+//      //encode
+//      EncodeOneFrame(iFrame);
+//      //extract target layer data
+//      encToDecData(info, iLen);
+//#ifdef DEBUG_FILE_SAVE_PARSEONLYCRASH
+//      fwrite(info.sLayerInfo[0].pBsBuf, iLen, 1, fEnc);
+//#endif
+//      ExtractDidNal(&info, iLen, &m_SLostSim, uiTargetLayerId);
+//#ifdef DEBUG_FILE_SAVE_PARSEONLYCRASH
+//      fwrite(info.sLayerInfo[0].pBsBuf, iLen, 1, fExtract);
+//#endif
+//      //parseonly
+//      //BsInfo_.pDstBuff = new unsigned char [1000000];
+//      rv = decoder_->DecodeParser(info.sLayerInfo[0].pBsBuf, iLen, &BsInfo_);
+//      EXPECT_TRUE(rv == 0);
+//      EXPECT_TRUE(BsInfo_.iNalNum == 0);
+//      rv = decoder_->DecodeParser(NULL, 0, &BsInfo_);
+//      EXPECT_TRUE(rv == 0);
+//      EXPECT_TRUE(BsInfo_.iNalNum != 0);
+//      //get final output bs
+//      iLen = 0;
+//      int i = 0;
+//      while (i < BsInfo_.iNalNum) {
+//        iLen += BsInfo_.iNalLenInByte[i];
+//        i++;
+//      }
+//#ifdef DEBUG_FILE_SAVE_PARSEONLYCRASH
+//      fwrite(BsInfo_.pDstBuff, iLen, 1, fDec);
+//#endif
+//      //SHA1Input(&ctx_, BsInfo_.pDstBuff, iLen);
+//      iFrame++;
+//    }
+//    //calculate final SHA1 value
+//    //unsigned char digest[SHA_DIGEST_LENGTH];
+//    //SHA1Result(&ctx_, digest);
+//    //if (!HasFatalFailure()) {
+//    //  CompareHashAnyOf(digest, pHashStr[uiTargetLayerId], sizeof *pHashStr / sizeof **pHashStr);
+//    //}
+//  } //while
+//#ifdef DEBUG_FILE_SAVE_PARSEONLY
+//  fclose(fEnc);
+//  fclose(fExtract);
+//  fclose(fDec);
+//#endif
+//}
 
 

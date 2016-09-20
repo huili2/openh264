@@ -69,7 +69,7 @@ int    g_iDecodedFrameNum = 0;
 #endif
 //using namespace WelsDec;
 
-//#define NO_DELAY_DECODING // For Demo interfaces test with no delay decoding
+#define NO_DELAY_DECODING // For Demo interfaces test with no delay decoding
 
 void H264DecodeInstance (ISVCDecoder* pDecoder, const char* kpH264FileName, const char* kpOuputFileName,
                          int32_t& iWidth, int32_t& iHeight, const char* pOptionFileName, const char* pLengthFileName) {
@@ -193,24 +193,24 @@ void H264DecodeInstance (ISVCDecoder* pDecoder, const char* kpH264FileName, cons
       iBufPos += iSliceSize;
       continue;
     }
-
-//for coverage test purpose
-    int32_t iEndOfStreamFlag;
-    pDecoder->GetOption (DECODER_OPTION_END_OF_STREAM, &iEndOfStreamFlag);
-    int32_t iCurIdrPicId;
-    pDecoder->GetOption (DECODER_OPTION_IDR_PIC_ID, &iCurIdrPicId);
-    int32_t iFrameNum;
-    pDecoder->GetOption (DECODER_OPTION_FRAME_NUM, &iFrameNum);
-    int32_t bCurAuContainLtrMarkSeFlag;
-    pDecoder->GetOption (DECODER_OPTION_LTR_MARKING_FLAG, &bCurAuContainLtrMarkSeFlag);
-    int32_t iFrameNumOfAuMarkedLtr;
-    pDecoder->GetOption (DECODER_OPTION_LTR_MARKED_FRAME_NUM, &iFrameNumOfAuMarkedLtr);
-    int32_t iFeedbackVclNalInAu;
-    pDecoder->GetOption (DECODER_OPTION_VCL_NAL, &iFeedbackVclNalInAu);
-    int32_t iFeedbackTidInAu;
-    pDecoder->GetOption (DECODER_OPTION_TEMPORAL_ID, &iFeedbackTidInAu);
-//~end for
-
+//
+////for coverage test purpose
+//    int32_t iEndOfStreamFlag;
+//    pDecoder->GetOption (DECODER_OPTION_END_OF_STREAM, &iEndOfStreamFlag);
+//    int32_t iCurIdrPicId;
+//    pDecoder->GetOption (DECODER_OPTION_IDR_PIC_ID, &iCurIdrPicId);
+//    int32_t iFrameNum;
+//    pDecoder->GetOption (DECODER_OPTION_FRAME_NUM, &iFrameNum);
+//    int32_t bCurAuContainLtrMarkSeFlag;
+//    pDecoder->GetOption (DECODER_OPTION_LTR_MARKING_FLAG, &bCurAuContainLtrMarkSeFlag);
+//    int32_t iFrameNumOfAuMarkedLtr;
+//    pDecoder->GetOption (DECODER_OPTION_LTR_MARKED_FRAME_NUM, &iFrameNumOfAuMarkedLtr);
+//    int32_t iFeedbackVclNalInAu;
+//    pDecoder->GetOption (DECODER_OPTION_VCL_NAL, &iFeedbackVclNalInAu);
+//    int32_t iFeedbackTidInAu;
+//    pDecoder->GetOption (DECODER_OPTION_TEMPORAL_ID, &iFeedbackTidInAu);
+////~end for
+//
     iStart = WelsTime();
     pData[0] = NULL;
     pData[1] = NULL;
@@ -392,7 +392,7 @@ int32_t main (int32_t iArgC, char* pArgV[]) {
     strInputFile = pArgV[1];
     strOutputFile = pArgV[2];
     sDecParam.uiTargetDqLayer = (uint8_t) - 1;
-    sDecParam.eEcActiveIdc = ERROR_CON_SLICE_COPY;
+    sDecParam.eEcActiveIdc = ERROR_CON_DISABLE; // ERROR_CON_SLICE_COPY;
     sDecParam.sVideoProperty.eVideoBsType = VIDEO_BITSTREAM_DEFAULT;
     if (iArgC > 3) {
       for (int i = 3; i < iArgC; i++) {

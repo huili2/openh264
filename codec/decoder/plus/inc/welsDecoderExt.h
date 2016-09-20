@@ -58,6 +58,7 @@ class CWelsDecoder : public ISVCDecoder {
  public:
 CWelsDecoder (void);
 virtual ~CWelsDecoder();
+int32_t ResetParseOnlyMemory();
 
 virtual long EXTAPI Initialize (const SDecodingParam* pParam);
 virtual long EXTAPI Uninitialize();
