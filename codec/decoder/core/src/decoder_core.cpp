@@ -104,11 +104,19 @@ static inline int32_t DecodeFrameConstruction (PWelsDecoderContext pCtx, uint8_t
           pCtx->bParamSetsLostFlag = false;
           //find required sps, pps and write into dst buff
           pSpsBs = bSubSps ? &pCtx->sSubsetSpsBsInfo [iSpsId] : &pCtx->sSpsBsInfo [iSpsId];
+          pPpsBs = &pCtx->sPpsBsInfo [iPpsId];
+         if (pDstBuf - pParser->pDstBuff + pSpsBs->uiSpsBsLen + pPpsBs->uiPpsBsLen >= MAX_ACCESS_UNIT_CAPACITY) {
+            pCtx->iErrorCode |= dsOutOfMemory;
+            pCtx->pParserBsInfo->uiOutBsTimeStamp = 0;
+            pCtx->pParserBsInfo->iNalNum = 0;
+            pCtx->pParserBsInfo->iSpsWidthInPixel = 0;
+            pCtx->pParserBsInfo->iSpsHeightInPixel = 0;
+            return ERR_INFO_OUT_OF_MEMORY;
+          }
           memcpy (pDstBuf, pSpsBs->pSpsBsBuf, pSpsBs->uiSpsBsLen);
           pParser->iNalLenInByte [pParser->iNalNum ++] = pSpsBs->uiSpsBsLen;
           pCtx->iNalLenInByte[pCtx->iNalNum ++] = pSpsBs->uiSpsBsLen;
           pDstBuf += pSpsBs->uiSpsBsLen;
-          pPpsBs = &pCtx->sPpsBsInfo [iPpsId];
           memcpy (pDstBuf, pPpsBs->pPpsBsBuf, pPpsBs->uiPpsBsLen);
           pParser->iNalLenInByte [pParser->iNalNum ++] = pPpsBs->uiPpsBsLen;
           pDstBuf += pPpsBs->uiPpsBsLen;
@@ -121,6 +129,14 @@ static inline int32_t DecodeFrameConstruction (PWelsDecoderContext pCtx, uint8_t
         iNalLen = pCurNal->sNalData.sVclNal.iNalLength;
         pNalBs = pCurNal->sNalData.sVclNal.pNalPos;
         pParser->iNalLenInByte [pParser->iNalNum ++] = iNalLen;
+        if (pDstBuf - pParser->pDstBuff + iNalLen >= MAX_ACCESS_UNIT_CAPACITY) {
+          pCtx->iErrorCode |= dsOutOfMemory;
+          pCtx->pParserBsInfo->uiOutBsTimeStamp = 0;
+          pCtx->pParserBsInfo->iNalNum = 0;
+          pCtx->pParserBsInfo->iSpsWidthInPixel = 0;
+          pCtx->pParserBsInfo->iSpsHeightInPixel = 0;
+          return ERR_INFO_OUT_OF_MEMORY;
+        }
         memcpy (pDstBuf, pNalBs, iNalLen);
         pDstBuf += iNalLen;
       }
@@ -497,6 +513,8 @@ int32_t ExpandBsBuffer (PWelsDecoderContext pCtx, const int kiSrcLen) {
   int32_t iNewBuffLen = WELS_MAX ((kiSrcLen * MAX_BUFFERED_NUM), (pCtx->iMaxBsBufferSizeInByte << iExpandStepShift));
   //allocate new bs buffer
   CMemoryAlign* pMa = pCtx->pMemAlign;
+
+  //re-alloc RawData
   uint8_t* pNewBsBuff = static_cast<uint8_t*> (pMa->WelsMallocz (iNewBuffLen, "pCtx->sRawData.pHead"));
   if (pNewBsBuff == NULL)
     return ERR_INFO_OUT_OF_MEMORY;
@@ -511,12 +529,28 @@ int32_t ExpandBsBuffer (PWelsDecoderContext pCtx, const int kiSrcLen) {
 
   //Copy current buffer status to new buffer
   memcpy (pNewBsBuff, pCtx->sRawData.pHead, pCtx->iMaxBsBufferSizeInByte);
-  pCtx->iMaxBsBufferSizeInByte = iNewBuffLen;
   pCtx->sRawData.pStartPos = pNewBsBuff + (pCtx->sRawData.pStartPos - pCtx->sRawData.pHead);
   pCtx->sRawData.pCurPos = pNewBsBuff + (pCtx->sRawData.pCurPos - pCtx->sRawData.pHead);
   pCtx->sRawData.pEnd = pNewBsBuff + iNewBuffLen;
   pMa->WelsFree (pCtx->sRawData.pHead, "pCtx->sRawData.pHead");
   pCtx->sRawData.pHead = pNewBsBuff;
+
+  if (pCtx->pParam->bParseOnly) {
+    //re-alloc SavedData
+    uint8_t* pNewSavedBsBuff = static_cast<uint8_t*> (pMa->WelsMallocz(iNewBuffLen, "pCtx->sRawData.pHead"));
+    if (pNewSavedBsBuff == NULL)
+      return ERR_INFO_OUT_OF_MEMORY;
+
+    //Copy current buffer status to new buffer
+    memcpy(pNewSavedBsBuff, pCtx->sSavedData.pHead, pCtx->iMaxBsBufferSizeInByte);
+    pCtx->sSavedData.pStartPos = pNewSavedBsBuff + (pCtx->sSavedData.pStartPos - pCtx->sSavedData.pHead);
+    pCtx->sSavedData.pCurPos = pNewSavedBsBuff + (pCtx->sSavedData.pCurPos - pCtx->sSavedData.pHead);
+    pCtx->sSavedData.pEnd = pNewSavedBsBuff + iNewBuffLen;
+    pMa->WelsFree(pCtx->sSavedData.pHead, "pCtx->sSavedData.pHead");
+    pCtx->sSavedData.pHead = pNewSavedBsBuff;
+  }
+ 
+  pCtx->iMaxBsBufferSizeInByte = iNewBuffLen;
   return ERR_NONE;
 }
 

@@ -273,7 +273,6 @@ void WelsWriteSliceEndSyn (SSlice* pSlice, bool bEntropyCodingModeFlag) {
 
   } else {
     BsRbspTrailingBits (pBs);
-    BsFlush (pBs);
   }
 }
 void InitCoeffFunc (SWelsFuncPtrList* pFuncList, const uint32_t uiCpuFlag, int32_t iEntropyCodingModeFlag) {

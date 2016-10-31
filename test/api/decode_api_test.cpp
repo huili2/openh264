@@ -1022,6 +1022,14 @@ public:
     BsInfo_.pDstBuff = pTmpPtr;
   }
 
+  void MockInputData(uint8_t* pData, int32_t iSize) {
+    int32_t iCurr = 0;
+    while (iCurr < iSize) {
+      *(pData + iCurr) = (*(pData + iCurr) + (rand() % 20) + 256) & 0x00ff;
+      iCurr++;
+    }
+  }
+
   void EncodeOneFrame(int iIdx) {
     int iFrameSize = iWidth_ * iHeight_ * 3 / 2;
     int iSize = (int)fread(buf_.data(), sizeof(char), iFrameSize, fYuv_);
@@ -1030,6 +1038,7 @@ public:
       iSize = (int)fread(buf_.data(), sizeof(char), iFrameSize, fYuv_);
       ASSERT_TRUE(iSize == iFrameSize);
     }
+    MockInputData(buf_.data(), iWidth_ * iHeight_);
     int rv = encoder_->EncodeFrame(&EncPic, &info);
     ASSERT_TRUE(rv == cmResultSuccess || rv == cmUnknownReason);
   }
@@ -1052,6 +1061,8 @@ protected:
 #define DEBUG_FILE_SAVE_CRA1
 TEST_F(DecodeParseCrashAPI, ParseOnlyCrash1_General) {
   uint32_t uiGet;
+  //FILE* fTest = fopen("test_log.txt", "w");
+  //fprintf(fTest, "Start test.\n");
   encoder_->Uninitialize();
   //do tests until crash
   unsigned int uiLoopRound = 0;
@@ -1065,7 +1076,7 @@ TEST_F(DecodeParseCrashAPI, ParseOnlyCrash1_General) {
 #endif
 
   do {
-    int iTotalFrameNum = (rand() % 100) + 1;
+    int iTotalFrameNum = (rand() % 1200) + 1;
     EncodeDecodeParamBase p = kParamArray[8]; //720p by default
 
     //Initialize Encoder
@@ -1167,9 +1178,11 @@ TEST_F(DecodeParseCrashAPI, ParseOnlyCrash1_General) {
 
 #ifdef DEBUG_FILE_SAVE_CRA1
         //save to file
-      fwrite(ucBuf_, 1, iDecAuSize, fDataFile);
-      fflush(fDataFile);
-      iFileSize += iDecAuSize;
+      if (iDecAuSize != 0) {
+        fwrite(ucBuf_, 1, iDecAuSize, fDataFile);
+        fflush(fDataFile);
+        iFileSize += iDecAuSize;
+      }
 
       //save to len file
       unsigned long ulTmp[4];
@@ -1199,6 +1212,8 @@ TEST_F(DecodeParseCrashAPI, ParseOnlyCrash1_General) {
   } while (1); //while (iLoopRound<100);
   fclose(fDataFile);
   fclose(fLenFile);
+  //fprintf(fTest, "End test.\n");
+  //fclose(fTest);
 #else
 }
   while (uiLoopRound < 1000);

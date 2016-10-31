@@ -669,8 +669,8 @@ TEST_F (EncoderInterfaceTest, ForceIntraFrameWithTemporal) {
   SEncParamExt sEncParamExt;
   pPtrEnc->GetDefaultParams (&sEncParamExt);
   sEncParamExt.iUsageType = CAMERA_VIDEO_REAL_TIME;
-  sEncParamExt.iPicWidth = MB_SIZE + abs ((rand() * 2) % (MAX_WIDTH - MB_SIZE));
-  sEncParamExt.iPicHeight = MB_SIZE + abs ((rand() * 2) % (MAX_HEIGHT - MB_SIZE));
+  sEncParamExt.iPicWidth = MB_SIZE + abs (((rand()>> 1) * 2) % (MAX_WIDTH - MB_SIZE));
+  sEncParamExt.iPicHeight = MB_SIZE + abs (((rand()>> 1) * 2) % (MAX_HEIGHT - MB_SIZE));
   sEncParamExt.iTargetBitrate = rand() + 1; //!=0
   // Force a bitrate of at least w*h/50, otherwise we will only get skipped frames
   sEncParamExt.iTargetBitrate = WELS_CLIP3 (sEncParamExt.iTargetBitrate,
@@ -686,6 +686,10 @@ TEST_F (EncoderInterfaceTest, ForceIntraFrameWithTemporal) {
   int iTargetTemporalLayerNum = rand() % MAX_TEMPORAL_LAYER_NUM;
   sEncParamExt.iTemporalLayerNum = (iTargetTemporalLayerNum > 2) ? iTargetTemporalLayerNum : 2;
 
+  sEncParamExt.fMaxFrameRate = 1833368192.;
+  sEncParamExt.sSpatialLayers[0].iVideoWidth = sEncParamExt.iPicWidth = 148;
+  sEncParamExt.sSpatialLayers[0].iVideoHeight = sEncParamExt.iPicHeight = 52;
+  sEncParamExt.sSpatialLayers[0].iSpatialBitrate = sEncParamExt.iTargetBitrate = 100000000;
   int iResult = pPtrEnc->InitializeExt (&sEncParamExt);
   EXPECT_EQ (iResult, static_cast<int> (cmResultSuccess)) << "iUsageType = " << sEncParamExt.iUsageType <<
       ", iPicWidth = " << sEncParamExt.iPicWidth << ", iPicHeight = " << sEncParamExt.iPicHeight << ", iTargetBitrate = " <<
@@ -708,6 +712,7 @@ TEST_F (EncoderInterfaceTest, ForceIntraFrameWithTemporal) {
 
   pPtrEnc->Uninitialize();
   EXPECT_EQ (iResult, static_cast<int> (cmResultSuccess));
+  int i = 5;
 }
 
 TEST_F (EncoderInterfaceTest, EncodeParameterSets) {

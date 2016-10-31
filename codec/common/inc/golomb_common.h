@@ -82,6 +82,9 @@ static inline int32_t BsWriteBits (PBitStringAux pBitString, int32_t iLen, const
     pBitString->iLeftBits -= iLen;
   } else {
     iLen -= pBitString->iLeftBits;
+    if (iLen == 0) {
+      int test = 0;
+    }
     pBitString->uiCurBits = (pBitString->uiCurBits << pBitString->iLeftBits) | (kuiValue >> iLen);
     WRITE_BE_32 (pBitString->pCurBuf, pBitString->uiCurBits);
     pBitString->pCurBuf += 4;
@@ -100,6 +103,9 @@ static inline int32_t BsWriteOneBit (PBitStringAux pBitString, const uint32_t ku
 }
 
 static inline int32_t BsFlush (PBitStringAux pBitString) {
+  if (pBitString->iLeftBits == 32) {
+    return 0;
+  }
   WRITE_BE_32 (pBitString->pCurBuf, pBitString->uiCurBits << pBitString->iLeftBits);
   pBitString->pCurBuf += 4 - pBitString->iLeftBits / 8;
   pBitString->iLeftBits = 32;
