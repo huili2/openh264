@@ -838,12 +838,13 @@ GENERATE_VAACalcSadBgd_UT (VAACalcSadBgd_sse2, 1, WELS_CPU_SSE2)
 GENERATE_VAACalcSadSsdBgd_UT (VAACalcSadSsdBgd_sse2, 1, WELS_CPU_SSE2)
 GENERATE_VAACalcSadSsd_UT (VAACalcSadSsd_sse2, 1, WELS_CPU_SSE2)
 GENERATE_VAACalcSadVar_UT (VAACalcSadVar_sse2, 1, WELS_CPU_SSE2)
-#if defined(HAVE_AVX2)
+if defined(HAVE_AVX2)
 GENERATE_VAACalcSad_UT (VAACalcSad_avx2, 1, WELS_CPU_AVX2)
 GENERATE_VAACalcSadBgd_UT (VAACalcSadBgd_avx2, 1, WELS_CPU_AVX2)
 GENERATE_VAACalcSadSsdBgd_UT (VAACalcSadSsdBgd_avx2, 1, WELS_CPU_AVX2)
 GENERATE_VAACalcSadSsd_UT (VAACalcSadSsd_avx2, 1, WELS_CPU_AVX2)
 GENERATE_VAACalcSadVar_UT (VAACalcSadVar_avx2, 1, WELS_CPU_AVX2)
+#endif //HAVE_AVX2
 #endif
 #endif
 

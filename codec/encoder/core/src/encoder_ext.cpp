@@ -285,6 +285,10 @@ int32_t ParamValidation (SLogContext* pLogCtx, SWelsSvcCodingParam* pCfg) {
     }
 
   }
+
+  //turn off adaptive quant now, algorithms needs to be refactored
+  pCfg->bEnableAdaptiveQuant = false;
+
   if (pCfg->iSpatialLayerNum > 1) {
     for (i = pCfg->iSpatialLayerNum - 1; i > 0; i--) {
       SSpatialLayerConfig* fDlpUp = &pCfg->sSpatialLayers[i];
@@ -358,10 +362,7 @@ int32_t ParamValidation (SLogContext* pLogCtx, SWelsSvcCodingParam* pCfg) {
                  "bEnableFrameSkip = %d,bitrate can't be controlled for RC_QUALITY_MODE,RC_BITRATE_MODE and RC_TIMESTAMP_MODE without enabling skip frame.",
                  pCfg->bEnableFrameSkip);
 
-    if (pCfg->iRCMode == RC_QUALITY_MODE) {
-      pCfg->iMinQp = GOM_MIN_QP_MODE;
-      pCfg->iMaxQp = GOM_MAX_QP_MODE;
-    } else if (pCfg->iUsageType == SCREEN_CONTENT_REAL_TIME) {
+    if (pCfg->iUsageType == SCREEN_CONTENT_REAL_TIME) {
       pCfg->iMinQp = MIN_SCREEN_QP;
       pCfg->iMaxQp = MAX_SCREEN_QP;
     } else {
@@ -1747,6 +1748,13 @@ int32_t RequestMemorySvc (sWelsEncCtx** ppCtx, SExistingParasetList* pExistingPa
   (*ppCtx)->iFrameBsSize = iTotalLength;
   (*ppCtx)->iPosBsBuffer = 0;
 
+  // for dynamic slice mode&& CABAC,allocate slice buffer to restore slice data
+  if (bDynamicSlice && pParam->iEntropyCodingModeFlag) {
+    for (int32_t iIdx = 0; iIdx < MAX_THREADS_NUM; iIdx++) {
+      (*ppCtx)->pDynamicBsBuffer[iIdx] = (uint8_t*)pMa->WelsMalloc (iMaxSliceBufferSize, "DynamicSliceBs");
+      WELS_VERIFY_RETURN_PROC_IF (1, (NULL == (*ppCtx)->pDynamicBsBuffer[iIdx]), FreeMemorySvc (ppCtx))
+    }
+  }
   // for pSlice bs buffers
   if (pParam->iMultipleThreadIdc > 1
       && RequestMtResource (ppCtx, pParam, iCountBsLen, iMaxSliceBufferSize, bDynamicSlice)) {
@@ -1956,7 +1964,11 @@ void FreeMemorySvc (sWelsEncCtx** ppCtx) {
       pMa->WelsFree (pCtx->pFrameBs, "pFrameBs");
       pCtx->pFrameBs = NULL;
     }
+    for (int32_t iIdx = 0; iIdx < MAX_THREADS_NUM; iIdx++) {
+      pMa->WelsFree (pCtx->pDynamicBsBuffer[iIdx], "DynamicSliceBs");
+      pCtx->pDynamicBsBuffer[iIdx] = NULL;
 
+    }
     // pSpsArray
     if (NULL != pCtx->pSpsArray) {
       pMa->WelsFree (pCtx->pSpsArray, "pSpsArray");
@@ -3140,22 +3152,38 @@ int32_t WritePadding (sWelsEncCtx* pCtx, int32_t iLen, int32_t& iSize) {
 /*
  * Force coding IDR as follows
  */
-int32_t ForceCodingIDR (sWelsEncCtx* pCtx) {
+int32_t ForceCodingIDR (sWelsEncCtx* pCtx, int32_t iLayerId) {
   if (NULL == pCtx)
     return 1;
-  for (int32_t iDid = 0; iDid < pCtx->pSvcParam->iSpatialLayerNum; iDid++) {
-    SSpatialLayerInternal* pParamInternal = &pCtx->pSvcParam->sDependencyLayers[iDid];
+  if ((iLayerId < 0) || (iLayerId >= MAX_SPATIAL_LAYER_NUM) || (!pCtx->pSvcParam->bSimulcastAVC)) {
+    for (int32_t iDid = 0; iDid < pCtx->pSvcParam->iSpatialLayerNum; iDid++) {
+      SSpatialLayerInternal* pParamInternal = &pCtx->pSvcParam->sDependencyLayers[iDid];
+      pParamInternal->iCodingIndex = 0;
+      pParamInternal->iFrameIndex = 0;
+      pParamInternal->iFrameNum = 0;
+      pParamInternal->iPOC = 0;
+      pParamInternal->bEncCurFrmAsIdrFlag = true;
+      pCtx->sEncoderStatistics[0].uiIDRReqNum++;
+    }
+    WelsLog (&pCtx->sLogCtx, WELS_LOG_INFO, "ForceCodingIDR(iDid 0-%d)at InputFrameCount=%d\n",
+             pCtx->pSvcParam->iSpatialLayerNum - 1, pCtx->sEncoderStatistics[0].uiInputFrameCount);
+
+
+
+  } else {
+    SSpatialLayerInternal* pParamInternal = &pCtx->pSvcParam->sDependencyLayers[iLayerId];
     pParamInternal->iCodingIndex = 0;
     pParamInternal->iFrameIndex = 0;
     pParamInternal->iFrameNum = 0;
     pParamInternal->iPOC = 0;
     pParamInternal->bEncCurFrmAsIdrFlag = true;
+    pCtx->sEncoderStatistics[iLayerId].uiIDRReqNum++;
+    WelsLog (&pCtx->sLogCtx, WELS_LOG_INFO, "ForceCodingIDR(iDid %d)at InputFrameCount=%d\n", iLayerId,
+             pCtx->sEncoderStatistics[iLayerId].uiInputFrameCount);
   }
-
   pCtx->bCheckWindowStatusRefreshFlag = false;
 
-  WelsLog (&pCtx->sLogCtx, WELS_LOG_INFO, "ForceCodingIDR at InputFrameCount=%d\n",
-           pCtx->sEncoderStatistics[0].uiInputFrameCount);
+
   return 0;
 }
 
@@ -3430,7 +3458,7 @@ void StackBackEncoderStatus (sWelsEncCtx* pEncCtx,
     pEncCtx->uiIdrPicId --;
 
     //set the next frame to be IDR
-    ForceCodingIDR (pEncCtx);
+    ForceCodingIDR (pEncCtx, pEncCtx->uiDependencyId);
   } else { // B pictures are not supported now, any else?
     assert (0);
   }
@@ -4096,7 +4124,7 @@ int32_t WelsEncoderEncodeExt (sWelsEncCtx* pCtx, SFrameBSInfo* pFbi, const SSour
     }
 
     if (pCtx->pVpp->UpdateSpatialPictures (pCtx, pSvcParam, iCurTid, iCurDid) != 0) {
-      ForceCodingIDR (pCtx);
+      ForceCodingIDR (pCtx, iCurDid);
       WelsLog (pLogCtx, WELS_LOG_WARNING,
                "WelsEncoderEncodeExt(), Logic Error Found in Preprocess updating. ForceCodingIDR!");
       //the above is to set the next frame IDR
@@ -4122,7 +4150,7 @@ int32_t WelsEncoderEncodeExt (sWelsEncCtx* pCtx, SFrameBSInfo* pFbi, const SSour
 
   if (ENC_RETURN_CORRECTED == pCtx->iEncoderError) {
     pCtx->pVpp->UpdateSpatialPictures (pCtx, pSvcParam, iCurTid, (pSpatialIndexMap + iSpatialIdx)->iDid);
-    ForceCodingIDR (pCtx);
+    ForceCodingIDR (pCtx, (pSpatialIndexMap + iSpatialIdx)->iDid);
     WelsLog (pLogCtx, WELS_LOG_ERROR, "WelsEncoderEncodeExt(), Logic Error Found in temporal level. ForceCodingIDR!");
     //the above is to set the next frame IDR
     pFbi->eFrameType = eFrameType;
@@ -4186,7 +4214,7 @@ int32_t WelsEncoderEncodeExt (sWelsEncCtx* pCtx, SFrameBSInfo* pFbi, const SSour
     if ((pCtx->iActiveThreadsNum > 1) && (MAX_NAL_UNITS_IN_LAYER < pFbi->sLayerInfo[k].iNalCount)) {
       WelsLog (& pCtx->sLogCtx, WELS_LOG_ERROR,
                "WelsEncoderEncodeExt(), iCountNumNals(%d) > MAX_NAL_UNITS_IN_LAYER(%d) under multi-thread(%d) NOT supported!",
-               pFbi->sLayerInfo[k].iNalCount, MAX_NAL_UNITS_IN_LAYER), pCtx->iActiveThreadsNum;
+               pFbi->sLayerInfo[k].iNalCount, MAX_NAL_UNITS_IN_LAYER, pCtx->iActiveThreadsNum);
       return ENC_RETURN_UNEXPECTED;
     }
   }

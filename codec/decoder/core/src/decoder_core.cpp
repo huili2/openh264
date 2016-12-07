@@ -106,11 +106,11 @@ static inline int32_t DecodeFrameConstruction (PWelsDecoderContext pCtx, uint8_t
           pSpsBs = bSubSps ? &pCtx->sSubsetSpsBsInfo [iSpsId] : &pCtx->sSpsBsInfo [iSpsId];
           pPpsBs = &pCtx->sPpsBsInfo [iPpsId];
          if (pDstBuf - pParser->pDstBuff + pSpsBs->uiSpsBsLen + pPpsBs->uiPpsBsLen >= MAX_ACCESS_UNIT_CAPACITY) {
+            WelsLog (& (pCtx->sLogCtx), WELS_LOG_WARNING,
+                     "DecodeFrameConstruction(): sps pps size: (%d %d) too large. Failed to parse. \n", pSpsBs->uiSpsBsLen,
+                     pPpsBs->uiPpsBsLen);
             pCtx->iErrorCode |= dsOutOfMemory;
-            pCtx->pParserBsInfo->uiOutBsTimeStamp = 0;
             pCtx->pParserBsInfo->iNalNum = 0;
-            pCtx->pParserBsInfo->iSpsWidthInPixel = 0;
-            pCtx->pParserBsInfo->iSpsHeightInPixel = 0;
             return ERR_INFO_OUT_OF_MEMORY;
           }
           memcpy (pDstBuf, pSpsBs->pSpsBsBuf, pSpsBs->uiSpsBsLen);
@@ -130,13 +130,14 @@ static inline int32_t DecodeFrameConstruction (PWelsDecoderContext pCtx, uint8_t
         pNalBs = pCurNal->sNalData.sVclNal.pNalPos;
         pParser->iNalLenInByte [pParser->iNalNum ++] = iNalLen;
         if (pDstBuf - pParser->pDstBuff + iNalLen >= MAX_ACCESS_UNIT_CAPACITY) {
+         WelsLog (& (pCtx->sLogCtx), WELS_LOG_WARNING,
+                   "DecodeFrameConstruction(): composed output size (%ld) exceeds (%d). Failed to parse. \n",
+                   (long) (pDstBuf - pParser->pDstBuff + iNalLen), MAX_ACCESS_UNIT_CAPACITY);
           pCtx->iErrorCode |= dsOutOfMemory;
-          pCtx->pParserBsInfo->uiOutBsTimeStamp = 0;
           pCtx->pParserBsInfo->iNalNum = 0;
-          pCtx->pParserBsInfo->iSpsWidthInPixel = 0;
-          pCtx->pParserBsInfo->iSpsHeightInPixel = 0;
           return ERR_INFO_OUT_OF_MEMORY;
         }
+
         memcpy (pDstBuf, pNalBs, iNalLen);
         pDstBuf += iNalLen;
       }
@@ -198,11 +199,11 @@ static inline int32_t DecodeFrameConstruction (PWelsDecoderContext pCtx, uint8_t
                        || (pCtx->iLastImgHeightInPixel != pDstInfo->UsrData.sSystemBuffer.iHeight);
   pCtx->iLastImgWidthInPixel = pDstInfo->UsrData.sSystemBuffer.iWidth;
   pCtx->iLastImgHeightInPixel = pDstInfo->UsrData.sSystemBuffer.iHeight;
-  if (pCtx->eErrorConMethod == ERROR_CON_DISABLE) //no buffer output if EC is disabled and frame incomplete
+  if (pCtx->pParam->eEcActiveIdc == ERROR_CON_DISABLE) //no buffer output if EC is disabled and frame incomplete
     pDstInfo->iBufferStatus = (int32_t) (bFrameCompleteFlag
                                          && pPic->bIsComplete); // When EC disable, ECed picture not output
-  else if ((pCtx->eErrorConMethod == ERROR_CON_SLICE_COPY_CROSS_IDR_FREEZE_RES_CHANGE
-            || pCtx->eErrorConMethod == ERROR_CON_SLICE_MV_COPY_CROSS_IDR_FREEZE_RES_CHANGE)
+  else if ((pCtx->pParam->eEcActiveIdc == ERROR_CON_SLICE_COPY_CROSS_IDR_FREEZE_RES_CHANGE
+            || pCtx->pParam->eEcActiveIdc == ERROR_CON_SLICE_MV_COPY_CROSS_IDR_FREEZE_RES_CHANGE)
            && pCtx->iErrorCode && bOutResChange)
     pCtx->bFreezeOutput = true;
 
@@ -514,7 +515,7 @@ int32_t ExpandBsBuffer (PWelsDecoderContext pCtx, const int kiSrcLen) {
   //allocate new bs buffer
   CMemoryAlign* pMa = pCtx->pMemAlign;
 
-  //re-alloc RawData
+  //Realloc sRawData
   uint8_t* pNewBsBuff = static_cast<uint8_t*> (pMa->WelsMallocz (iNewBuffLen, "pCtx->sRawData.pHead"));
   if (pNewBsBuff == NULL)
     return ERR_INFO_OUT_OF_MEMORY;
@@ -530,26 +531,26 @@ int32_t ExpandBsBuffer (PWelsDecoderContext pCtx, const int kiSrcLen) {
   //Copy current buffer status to new buffer
   memcpy (pNewBsBuff, pCtx->sRawData.pHead, pCtx->iMaxBsBufferSizeInByte);
   pCtx->sRawData.pStartPos = pNewBsBuff + (pCtx->sRawData.pStartPos - pCtx->sRawData.pHead);
-  pCtx->sRawData.pCurPos = pNewBsBuff + (pCtx->sRawData.pCurPos - pCtx->sRawData.pHead);
-  pCtx->sRawData.pEnd = pNewBsBuff + iNewBuffLen;
+  pCtx->sRawData.pCurPos   = pNewBsBuff + (pCtx->sRawData.pCurPos   - pCtx->sRawData.pHead);
+  pCtx->sRawData.pEnd      = pNewBsBuff + iNewBuffLen;
   pMa->WelsFree (pCtx->sRawData.pHead, "pCtx->sRawData.pHead");
   pCtx->sRawData.pHead = pNewBsBuff;
 
   if (pCtx->pParam->bParseOnly) {
-    //re-alloc SavedData
-    uint8_t* pNewSavedBsBuff = static_cast<uint8_t*> (pMa->WelsMallocz(iNewBuffLen, "pCtx->sRawData.pHead"));
+   //Realloc sSavedData
+    uint8_t* pNewSavedBsBuff = static_cast<uint8_t*> (pMa->WelsMallocz (iNewBuffLen, "pCtx->sSavedData.pHead"));
     if (pNewSavedBsBuff == NULL)
       return ERR_INFO_OUT_OF_MEMORY;
 
     //Copy current buffer status to new buffer
-    memcpy(pNewSavedBsBuff, pCtx->sSavedData.pHead, pCtx->iMaxBsBufferSizeInByte);
+   memcpy (pNewSavedBsBuff, pCtx->sSavedData.pHead, pCtx->iMaxBsBufferSizeInByte);
     pCtx->sSavedData.pStartPos = pNewSavedBsBuff + (pCtx->sSavedData.pStartPos - pCtx->sSavedData.pHead);
-    pCtx->sSavedData.pCurPos = pNewSavedBsBuff + (pCtx->sSavedData.pCurPos - pCtx->sSavedData.pHead);
-    pCtx->sSavedData.pEnd = pNewSavedBsBuff + iNewBuffLen;
-    pMa->WelsFree(pCtx->sSavedData.pHead, "pCtx->sSavedData.pHead");
+    pCtx->sSavedData.pCurPos   = pNewSavedBsBuff + (pCtx->sSavedData.pCurPos   - pCtx->sSavedData.pHead);
+    pCtx->sSavedData.pEnd      = pNewSavedBsBuff + iNewBuffLen;
+    pMa->WelsFree (pCtx->sSavedData.pHead, "pCtx->sSavedData.pHead");
     pCtx->sSavedData.pHead = pNewSavedBsBuff;
   }
- 
+
   pCtx->iMaxBsBufferSizeInByte = iNewBuffLen;
   return ERR_NONE;
 }
@@ -1242,10 +1243,11 @@ int32_t UpdateAccessUnit (PWelsDecoderContext pCtx) {
         pCurAu->uiActualUnitsNum) { // no found IDR nal within incoming AU, need exit to avoid mosaic issue, 11/19/2009
 
       pCtx->sDecoderStatistics.uiIDRLostNum++;
-      WelsLog (& (pCtx->sLogCtx), WELS_LOG_WARNING,
-               "UpdateAccessUnit():::::Key frame lost.....CAN NOT find IDR from current AU.");
+      if (!pCtx->bParamSetsLostFlag)
+        WelsLog (& (pCtx->sLogCtx), WELS_LOG_WARNING,
+                 "UpdateAccessUnit():::::Key frame lost.....CAN NOT find IDR from current AU.");
       pCtx->iErrorCode |= dsRefLost;
-      if (pCtx->eErrorConMethod == ERROR_CON_DISABLE) {
+      if (pCtx->pParam->eEcActiveIdc == ERROR_CON_DISABLE) {
 #ifdef LONG_TERM_REF
         pCtx->iErrorCode |= dsNoParamSets;
         return dsNoParamSets;
@@ -2281,7 +2283,7 @@ int32_t DecodeCurrentAccessUnit (PWelsDecoderContext pCtx, uint8_t** ppDst, SBuf
 
             bAllRefComplete = false;
             pCtx->iErrorCode |= dsRefLost;
-            if (pCtx->eErrorConMethod == ERROR_CON_DISABLE) {
+            if (pCtx->pParam->eEcActiveIdc == ERROR_CON_DISABLE) {
 #ifdef LONG_TERM_REF
               pCtx->bParamSetsLostFlag = true;
 #else
@@ -2301,7 +2303,7 @@ int32_t DecodeCurrentAccessUnit (PWelsDecoderContext pCtx, uint8_t** ppDst, SBuf
             WelsLog (& (pCtx->sLogCtx), WELS_LOG_DEBUG,
                      "reference picture introduced by this frame is lost during transmission! uiTId: %d",
                      pNalCur->sNalHeaderExt.uiTemporalId);
-            if (pCtx->eErrorConMethod == ERROR_CON_DISABLE) {
+            if (pCtx->pParam->eEcActiveIdc == ERROR_CON_DISABLE) {
               if (pCtx->iTotalNumMbRec == 0)
                 pCtx->pDec = NULL;
               return iRet;
@@ -2318,7 +2320,7 @@ int32_t DecodeCurrentAccessUnit (PWelsDecoderContext pCtx, uint8_t** ppDst, SBuf
                    iRet, pSh->iFrameNum, iCurrIdD, iCurrIdQ);
           bAllRefComplete = false;
           HandleReferenceLostL0 (pCtx, pNalCur);
-          if (pCtx->eErrorConMethod == ERROR_CON_DISABLE) {
+          if (pCtx->pParam->eEcActiveIdc == ERROR_CON_DISABLE) {
             if (pCtx->iTotalNumMbRec == 0)
               pCtx->pDec = NULL;
             return iRet;
@@ -2378,7 +2380,7 @@ int32_t DecodeCurrentAccessUnit (PWelsDecoderContext pCtx, uint8_t** ppDst, SBuf
       if (!pCtx->bInstantDecFlag) {
         if (!pCtx->pParam->bParseOnly) {
           //Do error concealment here
-          if ((NeedErrorCon (pCtx)) && (pCtx->eErrorConMethod != ERROR_CON_DISABLE)) {
+          if ((NeedErrorCon (pCtx)) && (pCtx->pParam->eEcActiveIdc != ERROR_CON_DISABLE)) {
             ImplementErrorCon (pCtx);
             pCtx->iTotalNumMbRec = pCtx->pSps->iMbWidth * pCtx->pSps->iMbHeight;
             pCtx->pDec->iSpsId = pCtx->pSps->iSpsId;
@@ -2397,7 +2399,7 @@ int32_t DecodeCurrentAccessUnit (PWelsDecoderContext pCtx, uint8_t** ppDst, SBuf
         if (iRet != ERR_NONE) {
           if (iRet == ERR_INFO_DUPLICATE_FRAME_NUM)
             pCtx->iErrorCode |= dsBitstreamError;
-          if (pCtx->eErrorConMethod == ERROR_CON_DISABLE) {
+          if (pCtx->pParam->eEcActiveIdc == ERROR_CON_DISABLE) {
             pCtx->pDec = NULL;
             return iRet;
           }
@@ -2447,7 +2449,7 @@ bool CheckAndFinishLastPic (PWelsDecoderContext pCtx, uint8_t** ppDst, SBufferIn
 
   //Do Error Concealment here
   if (bAuBoundaryFlag && (pCtx->iTotalNumMbRec != 0) && NeedErrorCon (pCtx)) { //AU ready but frame not completely reconed
-    if (pCtx->eErrorConMethod != ERROR_CON_DISABLE) {
+    if (pCtx->pParam->eEcActiveIdc != ERROR_CON_DISABLE) {
       ImplementErrorCon (pCtx);
       pCtx->iTotalNumMbRec = pCtx->pSps->iMbWidth * pCtx->pSps->iMbHeight;
       pCtx->pDec->iSpsId = pCtx->pSps->iSpsId;

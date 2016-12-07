@@ -34,7 +34,6 @@ void EncodeDecodeTestAPIBase::InitialEncDec (int iWidth, int iHeight) {
   //set a fixed random value
   iRandValue = rand() % 256;
 }
-
 void EncodeDecodeTestAPIBase::RandomParamExtCombination() {
 
   param_.iPicWidth  = WelsClip3 ((((rand() % MAX_WIDTH) >> 1)  + 1) << 1, 2, MAX_WIDTH);
@@ -320,6 +319,51 @@ TEST_F (EncodeDecodeTestAPI, SetOptionEncParamExt) {
     //to do
     // currently, there are still some error cases even though under condition cmResultSuccess == iResult
     // so need to enhance the validation check for any random value of each variable in ParamExt
+
+    if (cmResultSuccess == iResult) {
+      InitialEncDec (param_.iPicWidth, param_.iPicHeight);
+      EncodeOneFrame (0);
+      encToDecData (info, len);
+      pData[0] = pData[1] = pData[2] = 0;
+      memset (&dstBufInfo_, 0, sizeof (SBufferInfo));
+
+      iResult = decoder_->DecodeFrame2 (info.sLayerInfo[0].pBsBuf, len, pData, &dstBufInfo_);
+      ASSERT_TRUE (iResult == cmResultSuccess);
+      iResult = decoder_->DecodeFrame2 (NULL, 0, pData, &dstBufInfo_);
+      ASSERT_TRUE (iResult == cmResultSuccess);
+      EXPECT_EQ (dstBufInfo_.iBufferStatus, 1);
+    }
+  }
+
+  iTraceLevel = WELS_LOG_ERROR;
+  encoder_->SetOption (ENCODER_OPTION_TRACE_LEVEL, &iTraceLevel);
+}
+
+
+TEST_F (EncodeDecodeTestAPI, SetOptionEncParamBase) {
+  int iSpatialLayerNum = 4;
+  int iWidth       = WelsClip3 ((((rand() % MAX_WIDTH) >> 1)  + 1) << 1, 1 << iSpatialLayerNum, MAX_WIDTH);
+  int iHeight      = WelsClip3 ((((rand() % MAX_HEIGHT) >> 1)  + 1) << 1, 1 << iSpatialLayerNum, MAX_HEIGHT);
+  float fFrameRate = rand() + 0.5f;
+  int iEncFrameNum = WelsClip3 ((rand() % ENCODE_FRAME_NUM) + 1, 1, ENCODE_FRAME_NUM);
+  int iSliceNum        = 1;
+  encoder_->GetDefaultParams (&param_);
+  prepareParamDefault (iSpatialLayerNum, iSliceNum, iWidth, iHeight, fFrameRate, &param_);
+
+  int rv = encoder_->InitializeExt (&param_);
+  ASSERT_TRUE (rv == cmResultSuccess);
+
+  int iTraceLevel = WELS_LOG_QUIET;
+  rv = encoder_->SetOption (ENCODER_OPTION_TRACE_LEVEL, &iTraceLevel);
+  ASSERT_TRUE (rv == cmResultSuccess);
+
+  for (int i = 0; i < iEncFrameNum; i++) {
+    int iResult;
+    int len = 0;
+    unsigned char* pData[3] = { NULL };
+
+    param_.iTargetBitrate     = rand() % BIT_RATE_RANGE;
+    iResult = encoder_->SetOption (ENCODER_OPTION_SVC_ENCODE_PARAM_BASE, &param_);
 
     if (cmResultSuccess == iResult) {
       InitialEncDec (param_.iPicWidth, param_.iPicHeight);
@@ -1228,18 +1272,18 @@ static const EncodeOptionParam kOptionParamArray[] = {
   {false, false, true, 30, 600, 460, 1, SM_FIXEDSLCNUM_SLICE, 0, 15.0, 4, ""},
   {false, false, true, 30, 600, 460, 1, SM_FIXEDSLCNUM_SLICE, 0, 15.0, 8, ""},
   //for large size tests
-  {true, false, true, 30, 4096, 2304, 1, SM_RESERVED, 0, 7.5, 1, ""}, // large picture size
-  {true, false, true, 30, 2304, 4096, 1, SM_RESERVED, 0, 15.0, 1, ""},
-  {true, false, true, 30, 3072, 3072, 1, SM_RESERVED, 0, 15.0, 1, ""},
-  //{true, false, true, 30, 3072, 3072, 1, SM_RESERVED, 0, 15.0, 4, ""}, //14760
-  {false, false, true, 30, 1072, 8576, 1, SM_RESERVED, 0, 15.0, 1, ""},
-  //{false, true, true, 30, 8576, 1072, 24, SM_SINGLE_SLICE, 0, 15.0, 1, ""}, //14754
+  {true, false, true, 2, 4096, 2304, 1, SM_RESERVED, 0, 7.5, 1, ""}, // large picture size, //28
+  {true, false, true, 2, 2304, 4096, 1, SM_RESERVED, 0, 15.0, 1, ""}, //29
+  {true, false, true, 2, 3072, 3072, 1, SM_RESERVED, 0, 15.0, 1, ""}, //30
+  //{true, false, true, 2, 3072, 3072, 1, SM_RESERVED, 0, 15.0, 4, ""}, //14760
+  {false, false, true, 2, 1072, 8576, 1, SM_RESERVED, 0, 15.0, 1, ""},
+  {false, false, true, 2, 8576, 1072, 24, SM_SINGLE_SLICE, 0, 15.0, 1, ""}, //14754
   //{false, false, false, 2, 8576, 1088, 24, SM_SINGLE_SLICE, 0, 15.0, 1, ""}, //14755
   //{false, false, false, 2, 1088, 8576, 24, SM_SINGLE_SLICE, 0, 15.0, 1, ""}, //14755
-  {false, false, true, 1, 8688, 1072, 24, SM_SINGLE_SLICE, 0, 15.0, 1, ""}, //Annex A: PicWidthInMbs <= sqrt(36864*8) = 543; 543*16=8688; 36864/543=67; 67*16=1072
-  {false, false, true, 1, 1072, 8688, 24, SM_SINGLE_SLICE, 0, 15.0, 1, ""}, //Annex A: FrameHeightInMbs <= sqrt(36864*8) = 543; 543*16=8688; 36864/543=67; 67*16=1072
-  //{false, false, true, 30, 589824, 16, 24, SM_RESERVED, 0, 15.0, 1, ""},
-  //{false, false, true, 30, 589824, 16, 24, SM_RESERVED, 0, 15.0, 1, ""},
+  {false, false, true, 2, 8688, 1072, 24, SM_SINGLE_SLICE, 0, 15.0, 1, ""}, //Annex A: PicWidthInMbs <= sqrt(36864*8) = 543; 543*16=8688; 36864/543=67; 67*16=1072
+  {false, false, true, 2, 1072, 8688, 24, SM_SINGLE_SLICE, 0, 15.0, 1, ""}, //Annex A: FrameHeightInMbs <= sqrt(36864*8) = 543; 543*16=8688; 36864/543=67; 67*16=1072
+  //{false, false, true, 2, 589824, 16, 24, SM_RESERVED, 0, 15.0, 1, ""},
+  //{false, false, true, 2, 589824, 16, 24, SM_RESERVED, 0, 15.0, 1, ""},
 };
 
 class EncodeTestAPI : public ::testing::TestWithParam<EncodeOptionParam>, public ::EncodeDecodeTestAPIBase {

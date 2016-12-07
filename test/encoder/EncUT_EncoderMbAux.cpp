@@ -209,7 +209,7 @@ TEST (EncodeMbAuxTest, WelsDctT4_sse2) {
 TEST (EncodeMbAuxTest, WelsDctFourT4_sse2) {
   TestDctFourT4 (WelsDctFourT4_sse2);
 }
-#ifdef HAVE_AVX2
+ifdef HAVE_AVX2
 TEST (EncodeMbAuxTest, WelsDctT4_avx2) {
   if (WelsCPUFeatureDetect (0) & WELS_CPU_AVX2)
     TestDctT4 (WelsDctT4_avx2);
@@ -219,8 +219,9 @@ TEST (EncodeMbAuxTest, WelsDctFourT4_avx2) {
   if (WelsCPUFeatureDetect (0) & WELS_CPU_AVX2)
     TestDctFourT4 (WelsDctFourT4_avx2);
 }
-#endif
+endif //HAVE_AVX2
 
+#ifndef X86_32_PICASM
 TEST (EncodeMbAuxTest, WelsCalculateSingleCtr4x4_sse2) {
   CMemoryAlign cMemoryAlign (0);
   ALLOC_MEMORY (int16_t, iDctC, 16);
@@ -234,6 +235,7 @@ TEST (EncodeMbAuxTest, WelsCalculateSingleCtr4x4_sse2) {
   FREE_MEMORY (iDctC);
   FREE_MEMORY (iDctS);
 }
+#endif //#ifndef X86_32_PICASM
 #endif
 
 void copy (uint8_t* pDst, int32_t iDStride, uint8_t* pSrc, int32_t iSStride, int32_t iWidth, int32_t iHeight) {
@@ -301,9 +303,11 @@ TEST (EncodeMbAuxTest, WelsGetNoneZeroCount_c) {
   TestGetNoneZeroCount (WelsGetNoneZeroCount_c);
 }
 #ifdef X86_ASM
+#ifndef X86_32_PICASM
 TEST (EncodeMbAuxTest, WelsGetNoneZeroCount_sse2) {
   TestGetNoneZeroCount (WelsGetNoneZeroCount_sse2);
 }
+#endif
 TEST (EncodeMbAuxTest, WelsGetNoneZeroCount_sse42) {
   if (WelsCPUFeatureDetect (0) & WELS_CPU_SSE42)
     TestGetNoneZeroCount (WelsGetNoneZeroCount_sse42);
