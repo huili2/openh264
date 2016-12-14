@@ -88,7 +88,7 @@ int AutoTestDec() {
     }
     NSString* bitstream = [decFilePath stringByAppendingString:@"/"];
     bitstream = [bitstream stringByAppendingString:caseName];
-    NSString* yuvFileName = [caseName stringByAppendingString:@".yuv"];
+    NSString* yuvFileName = [caseName stringByAppendingString:@"_parse.264"];
     NSString* tmpyuvFileName = [outYuvPath stringByAppendingString:@"/"];
     yuvFileName = [tmpyuvFileName stringByAppendingString:yuvFileName];
 

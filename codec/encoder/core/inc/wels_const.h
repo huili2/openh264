@@ -113,7 +113,7 @@
 #define MAX_GOP_SIZE    (1<<(MAX_TEMPORAL_LEVEL-1))
 
 #define MAX_SHORT_REF_COUNT             (MAX_GOP_SIZE>>1) // 16 in standard, maximal count number of short reference pictures
-#define LONG_TERM_REF_NUM               2
+#define LONG_TERM_REF_NUM               3
 #define LONG_TERM_REF_NUM_SCREEN        4
 #define MAX_REF_PIC_COUNT               16 // 32 in standard, maximal Short + Long reference pictures
 #define MIN_REF_PIC_COUNT               1               // minimal count number of reference pictures, 1 short + 2 key reference based?

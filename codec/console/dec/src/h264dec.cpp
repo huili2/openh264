@@ -92,14 +92,11 @@ void H264DecodeInstance (ISVCDecoder* pDecoder, const char* kpH264FileName, cons
   uint8_t* pBuf = NULL;
   uint8_t uiStartCode[4] = {0, 0, 0, 1};
 
-  uint8_t* pData[3] = {NULL};
-  uint8_t* pDst[3] = {NULL};
   SBufferInfo sDstBufInfo;
 
   int32_t iBufPos = 0;
   int32_t iFileSize;
   int32_t i = 0;
-  int32_t iLastWidth = 0, iLastHeight = 0;
   int32_t iFrameCount = 0;
   int32_t iEndOfStreamFlag = 0;
   //for coverage test purpose
@@ -194,96 +191,38 @@ void H264DecodeInstance (ISVCDecoder* pDecoder, const char* kpH264FileName, cons
       continue;
     }
 
-//for coverage test purpose
-    int32_t iEndOfStreamFlag;
-    pDecoder->GetOption (DECODER_OPTION_END_OF_STREAM, &iEndOfStreamFlag);
-    int32_t iCurIdrPicId;
-    pDecoder->GetOption (DECODER_OPTION_IDR_PIC_ID, &iCurIdrPicId);
-    int32_t iFrameNum;
-    pDecoder->GetOption (DECODER_OPTION_FRAME_NUM, &iFrameNum);
-    int32_t bCurAuContainLtrMarkSeFlag;
-    pDecoder->GetOption (DECODER_OPTION_LTR_MARKING_FLAG, &bCurAuContainLtrMarkSeFlag);
-    int32_t iFrameNumOfAuMarkedLtr;
-    pDecoder->GetOption (DECODER_OPTION_LTR_MARKED_FRAME_NUM, &iFrameNumOfAuMarkedLtr);
-    int32_t iFeedbackVclNalInAu;
-    pDecoder->GetOption (DECODER_OPTION_VCL_NAL, &iFeedbackVclNalInAu);
-    int32_t iFeedbackTidInAu;
-    pDecoder->GetOption (DECODER_OPTION_TEMPORAL_ID, &iFeedbackTidInAu);
-//~end for
 
     iStart = WelsTime();
-    pData[0] = NULL;
-    pData[1] = NULL;
-    pData[2] = NULL;
     uiTimeStamp ++;
-    memset (&sDstBufInfo, 0, sizeof (SBufferInfo));
+    SParserBsInfo sParseBsInfo;
+    ::memset (&sParseBsInfo, 0, sizeof (SParserBsInfo));
     sDstBufInfo.uiInBsTimeStamp = uiTimeStamp;
-#ifndef NO_DELAY_DECODING
-    pDecoder->DecodeFrameNoDelay (pBuf + iBufPos, iSliceSize, pData, &sDstBufInfo);
-#else
-    pDecoder->DecodeFrame2 (pBuf + iBufPos, iSliceSize, pData, &sDstBufInfo);
-#endif
 
-    if (sDstBufInfo.iBufferStatus == 1) {
-      pDst[0] = pData[0];
-      pDst[1] = pData[1];
-      pDst[2] = pData[2];
-    }
-    iEnd    = WelsTime();
-    iTotal += iEnd - iStart;
-    if (sDstBufInfo.iBufferStatus == 1) {
-      cOutputModule.Process ((void**)pDst, &sDstBufInfo, pYuvFile);
-      iWidth  = sDstBufInfo.UsrData.sSystemBuffer.iWidth;
-      iHeight = sDstBufInfo.UsrData.sSystemBuffer.iHeight;
+    DECODING_STATE iRc = pDecoder->DecodeParser(pBuf + iBufPos, iSliceSize, &sParseBsInfo);
 
-      if (pOptionFile != NULL) {
-        if (iWidth != iLastWidth && iHeight != iLastHeight) {
-          fwrite (&iFrameCount, sizeof (iFrameCount), 1, pOptionFile);
-          fwrite (&iWidth , sizeof (iWidth) , 1, pOptionFile);
-          fwrite (&iHeight, sizeof (iHeight), 1, pOptionFile);
-          iLastWidth  = iWidth;
-          iLastHeight = iHeight;
-        }
+    if (sParseBsInfo.iNalNum > 0) {
+      unsigned char *pBuf = sParseBsInfo.pDstBuff;
+      for (int i = 0; i < sParseBsInfo.iNalNum; i++) {
+        fwrite (pBuf, sParseBsInfo.iNalLenInByte[i], 1, pYuvFile);
+        pBuf += sParseBsInfo.iNalLenInByte[i];
       }
-      ++ iFrameCount;
+      ++iFrameCount;
     }
-
-#ifdef NO_DELAY_DECODING
-    iStart = WelsTime();
-    pData[0] = NULL;
-    pData[1] = NULL;
-    pData[2] = NULL;
-    memset (&sDstBufInfo, 0, sizeof (SBufferInfo));
-    sDstBufInfo.uiInBsTimeStamp = uiTimeStamp;
-    pDecoder->DecodeFrame2 (NULL, 0, pData, &sDstBufInfo);
-    if (sDstBufInfo.iBufferStatus == 1) {
-      pDst[0] = pData[0];
-      pDst[1] = pData[1];
-      pDst[2] = pData[2];
-    }
-    iEnd    = WelsTime();
-    iTotal += iEnd - iStart;
-    if (sDstBufInfo.iBufferStatus == 1) {
-      cOutputModule.Process ((void**)pDst, &sDstBufInfo, pYuvFile);
-      iWidth  = sDstBufInfo.UsrData.sSystemBuffer.iWidth;
-      iHeight = sDstBufInfo.UsrData.sSystemBuffer.iHeight;
-
-      if (pOptionFile != NULL) {
-        if (iWidth != iLastWidth && iHeight != iLastHeight) {
-          fwrite (&iFrameCount, sizeof (iFrameCount), 1, pOptionFile);
-          fwrite (&iWidth , sizeof (iWidth) , 1, pOptionFile);
-          fwrite (&iHeight, sizeof (iHeight), 1, pOptionFile);
-          iLastWidth  = iWidth;
-          iLastHeight = iHeight;
-        }
+    iRc = pDecoder->DecodeParser(0, 0, &sParseBsInfo);
+    if (sParseBsInfo.iNalNum > 0) {
+      unsigned char *pBuf = sParseBsInfo.pDstBuff;
+      for (int i = 0; i < sParseBsInfo.iNalNum; i++) {
+        fwrite (pBuf, sParseBsInfo.iNalLenInByte[i], 1, pYuvFile);
+        pBuf += sParseBsInfo.iNalLenInByte[i];
       }
-      ++ iFrameCount;
+      ++iFrameCount;
     }
-#endif
+
     iBufPos += iSliceSize;
     ++ iSliceIndex;
   }
-
+  iEnd = WelsTime();
+  iTotal += iEnd - iStart;
   if (fpTrack) {
     fclose (fpTrack);
     fpTrack = NULL;
@@ -392,8 +331,9 @@ int32_t main (int32_t iArgC, char* pArgV[]) {
     strInputFile = pArgV[1];
     strOutputFile = pArgV[2];
     sDecParam.uiTargetDqLayer = (uint8_t) - 1;
-    sDecParam.eEcActiveIdc = ERROR_CON_SLICE_COPY;
+    sDecParam.eEcActiveIdc = ERROR_CON_DISABLE; //ERROR_CON_SLICE_COPY;
     sDecParam.sVideoProperty.eVideoBsType = VIDEO_BITSTREAM_DEFAULT;
+    sDecParam.bParseOnly = true;
     if (iArgC > 3) {
       for (int i = 3; i < iArgC; i++) {
         char* cmd = pArgV[i];

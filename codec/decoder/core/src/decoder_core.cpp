@@ -131,8 +131,8 @@ static inline int32_t DecodeFrameConstruction (PWelsDecoderContext pCtx, uint8_t
         pParser->iNalLenInByte [pParser->iNalNum ++] = iNalLen;
         if (pDstBuf - pParser->pDstBuff + iNalLen >= MAX_ACCESS_UNIT_CAPACITY) {
           WelsLog (& (pCtx->sLogCtx), WELS_LOG_WARNING,
-                   "DecodeFrameConstruction(): composed output size (%ld) exceeds (%d). Failed to parse. \n",
-                   (long) (pDstBuf - pParser->pDstBuff + iNalLen), MAX_ACCESS_UNIT_CAPACITY);
+                   "DecodeFrameConstruction(): current vcl packet no (%d) size (%d), composed output size (%ld) exceeds (%d). Failed to parse. \n",
+                   pParser->iNalNum, iNalLen, (long) (pDstBuf - pParser->pDstBuff + iNalLen), MAX_ACCESS_UNIT_CAPACITY);
           pCtx->iErrorCode |= dsOutOfMemory;
           pCtx->pParserBsInfo->iNalNum = 0;
           return ERR_INFO_OUT_OF_MEMORY;
