@@ -184,6 +184,14 @@ static inline int32_t DecodeFrameConstruction (PWelsDecoderContext pCtx, uint8_t
       return ERR_INFO_MB_NUM_INADEQUATE;
   } else if (pCurDq->sLayerInfo.sNalHeaderExt.bIdrFlag
              && (pCtx->iErrorCode == dsErrorFree)) { //complete non-ECed IDR frame done
+    if (pCtx->pDec->bIsComplete == false) {
+      int a[2], i = 0;
+      
+      while (i < 3) {
+        a[i] = i;
+        i++;
+      }
+    }
     pCtx->pDec->bIsComplete = true;
     pCtx->bFreezeOutput = false;
   }
